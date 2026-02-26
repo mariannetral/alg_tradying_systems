@@ -1,0 +1,6 @@
+pandas
+numpy
+ta
+optuna
+matplotlib
+tqdm
