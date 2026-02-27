@@ -1,24 +1,26 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-from src.backtest import run_single_backtest, calculate_metrics
+from src.backtest import run_single_backtest
+from src.metrics import calculate_metrics
 
 
 def run_sensitivity_analysis(data_test, best_params):
-    """Varía los parámetros óptimos +-20% y grafica el impacto."""
     results = []
     variations = [0.8, 1.0, 1.2]
 
-    print("\nGenerando matriz de sensibilidad (+-20%)...")
     for v_tp in variations:
         for v_sl in variations:
+            # Ahora variamos TP, SL e incluimos RSI en el análisis
             test_p = {
                 'tp': best_params['tp'] * v_tp,
                 'sl': best_params['sl'] * v_sl,
-                'rsi_p': best_params.get('rsi_p', 14)
+                'rsi_p': int(best_params['rsi_p'] * v_tp),  # Variando dimensión temporal
+                'ema_p': best_params['ema_p'],
+                'bb_p': best_params['bb_p']
             }
-            history = run_single_backtest(data_test, test_p)
-            calmar = calculate_metrics(history)['Calmar']
+            equity = run_single_backtest(data_test, test_p)
+            calmar = calculate_metrics(equity)['Calmar']
 
             results.append({
                 'TP_Var': f"{int(v_tp * 100)}%",
@@ -32,21 +34,16 @@ def run_sensitivity_analysis(data_test, best_params):
 
 
 def plot_heatmap(df):
-    """Heatmap del análisis de sensibilidad."""
     pivot = df.pivot(index='TP_Var', columns='SL_Var', values='Calmar')
     order = ['80%', '100%', '120%']
     pivot = pivot.reindex(index=order, columns=order)
-
     plt.figure(figsize=(8, 6))
     plt.imshow(pivot, cmap='RdYlGn')
-
     for i in range(len(pivot.index)):
         for j in range(len(pivot.columns)):
-            plt.text(j, i, f"{pivot.iloc[i, j]:.2f}", ha="center", va="center", fontweight='bold', color='black')
-
-    plt.title("Sensibilidad: Impacto en Calmar Ratio (+-20%)")
+            plt.text(j, i, f"{pivot.iloc[i, j]:.2f}", ha="center", va="center", fontweight='bold')
+    plt.title("Sensibilidad: Calmar Ratio (+-20%)")
     plt.xlabel("Variación Stop Loss")
     plt.ylabel("Variación Take Profit")
-    plt.colorbar(label='Calmar Ratio')
-    plt.tight_layout()
+    plt.colorbar()
     plt.savefig('results/sensitivity_heatmap.png')

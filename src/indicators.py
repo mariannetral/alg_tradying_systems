@@ -1,27 +1,32 @@
+import pandas as pd
 import ta
 
-def apply_indicators(df, rsi_p=14, sma_p=20, stoch_p=14):
-    """
-    Implementa 3 indicadores técnicos para validación de señal (2 de 3).
-    """
-    df = df.copy()
-    # 1. RSI (Momentum)
-    df['rsi'] = ta.momentum.RSIIndicator(df['Close'], window=rsi_p).rsi()
-    # 2. SMA (Trend)
-    df['sma'] = ta.trend.sma_indicator(df['Close'], window=sma_p)
-    # 3. Stochastic Oscillator (Momentum/Reversion)
-    stoch = ta.momentum.StochasticOscillator(df['High'], df['Low'], df['Close'], window=stoch_p)
-    df['stoch'] = stoch.stoch()
+
+def generate_signals(data: pd.DataFrame, params: dict) -> pd.DataFrame:
+    df = data.copy()
+
+    # 1. Momentum: RSI
+    df['rsi'] = ta.momentum.RSIIndicator(df['Close'], window=params.get('rsi_p', 14)).rsi()
+    # 2. Tendencia: EMA
+    df['ema'] = ta.trend.ema_indicator(df['Close'], window=params.get('ema_p', 50))
+    # 3. Volatilidad: Bollinger Bands
+    bb = ta.volatility.BollingerBands(df['Close'], window=params.get('bb_p', 20))
+    df['bb_low'] = bb.bollinger_lband()
+    df['bb_high'] = bb.bollinger_hband()
+
+    df = df.dropna()
+
+    # Regla 2 de 3
+    long_hints = (df['rsi'] < 35).astype(int) + (df['Close'] > df['ema']).astype(int) + (
+                df['Close'] < df['bb_low']).astype(int)
+    short_hints = (df['rsi'] > 65).astype(int) + (df['Close'] < df['ema']).astype(int) + (
+                df['Close'] > df['bb_high']).astype(int)
+
+    df['raw_signal'] = 0
+    df.loc[long_hints >= 2, 'raw_signal'] = 1
+    df.loc[short_hints >= 2, 'raw_signal'] = -1
+
+    # SOLUCIÓN CRÍTICA: Desplazar la señal para evitar look-ahead bias
+    df['signal'] = df['raw_signal'].shift(1)
+
     return df.dropna()
-
-
-def get_signal(row):
-    """
-    Confirmación de señal: Al menos 2 de 3 indicadores deben coincidir.
-    """
-    long_hints = [row['rsi'] < 30, row['Close'] > row['sma'], row['stoch'] < 20]
-    short_hints = [row['rsi'] > 70, row['Close'] < row['sma'], row['stoch'] > 80]
-
-    if sum(long_hints) >= 2: return 'LONG'
-    if sum(short_hints) >= 2: return 'SHORT'
-    return None
